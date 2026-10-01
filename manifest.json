@@ -1,0 +1,9 @@
+{
+  "name":"Pensioen Countdown",
+  "short_name":"Pensioen",
+  "start_url":"./",
+  "display":"standalone",
+  "background_color":"#f4f1ea",
+  "theme_color":"#f4f1ea",
+  "lang":"nl"
+}

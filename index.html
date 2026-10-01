@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f4f1ea">
+<title>Pensioen Countdown</title>
+<link rel="manifest" href="manifest.json">
+<style>
+:root{--bg:#f4f1ea;--ink:#26251f;--muted:#77746a;--open:#ddd9cf;--done:#6f8065;--today:#9b704f;--card:#fbfaf6}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:760px;margin:auto;padding:28px 18px 44px}
+header{text-align:center;padding:12px 0 22px}
+.kicker{font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+h1{font:600 clamp(2.1rem,8vw,4.2rem)/1.05 Georgia,serif;margin:8px 0 4px}
+.subtitle{color:var(--muted);font-size:1rem}
+.counter{text-align:center;background:var(--card);border-radius:24px;padding:25px 15px;margin:8px 0 22px;box-shadow:0 2px 12px #0000000b}
+.number{font:600 clamp(4.6rem,22vw,8.5rem)/.9 Georgia,serif}
+.label{font-size:1.1rem;margin-top:8px}
+.progress{height:7px;background:var(--open);border-radius:9px;overflow:hidden;margin:20px auto 8px;max-width:430px}
+.progress>i{display:block;height:100%;background:var(--done);width:0}
+.meta{color:var(--muted);font-size:.9rem}
+.month{margin:20px 0}.month h2{font:600 1.2rem Georgia,serif;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
+.day{min-height:52px;border:0;border-radius:12px;background:var(--open);color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;font-size:.82rem}
+.day.done{background:var(--done);color:white}.day.today{outline:3px solid var(--today);outline-offset:2px}
+.day small{opacity:.65;font-size:.67rem;margin-top:3px}.day:disabled{cursor:default}
+.legend{display:flex;justify-content:center;gap:18px;color:var(--muted);font-size:.78rem;margin:20px 0}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--open);margin-right:5px}.dot.done{background:var(--done)}
+details{background:var(--card);border-radius:18px;padding:15px;margin-top:20px} summary{cursor:pointer;font-weight:600}
+.row{display:flex;gap:10px;align-items:center;margin:14px 0;flex-wrap:wrap}
+input{font:inherit;padding:10px 12px;border:1px solid #ccc7ba;border-radius:10px;background:white}
+button.action{border:0;background:var(--ink);color:white;border-radius:10px;padding:10px 14px;font:inherit;cursor:pointer}
+.note{font-size:.82rem;color:var(--muted);line-height:1.5}
+#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#26251f;color:#fff;padding:11px 16px;border-radius:14px;display:none;box-shadow:0 4px 20px #0003}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="kicker">De laatste etappe</div>
+<h1>Pensioen Countdown</h1>
+<div class="subtitle" id="dateLine"></div>
+</header>
+
+<section class="counter">
+<div class="number" id="remaining">0</div>
+<div class="label">werkdagen te gaan</div>
+<div class="progress"><i id="bar"></i></div>
+<div class="meta" id="progressText"></div>
+</section>
+
+<section id="months"></section>
+
+<div class="legend">
+<span><i class="dot"></i>nog te werken</span>
+<span><i class="dot done"></i>afgevinkt</span>
+</div>
+
+<details>
+<summary>Instellingen</summary>
+<div class="row">
+<label>Laatste werkdag:
+<input id="endDate" type="date">
+</label>
+<button class="action" id="recalc">Bereken opnieuw</button>
+</div>
+<div class="row">
+<button class="action" id="reset">Wis alle afvinkingen</button>
+</div>
+<p class="note">De app telt maandag t/m vrijdag. Weekenden worden automatisch overgeslagen. Je kunt een werkdag met één tik afvinken of weer openzetten. De gegevens blijven op deze telefoon bewaard.</p>
+</details>
+</main>
+<div id="toast"></div>
+<script>
+const KEY='pensioen-countdown-v1';
+const state=JSON.parse(localStorage.getItem(KEY)||'{}');
+const defaultEnd='2027-03-31';
+const endInput=document.querySelector('#endDate');
+endInput.value=state.endDate||defaultEnd;
+
+function save(){localStorage.setItem(KEY,JSON.stringify(state))}
+function iso(d){return d.toISOString().slice(0,10)}
+function parse(s){let [y,m,day]=s.split('-').map(Number);return new Date(y,m-1,day)}
+function workdays(a,b){
+ let arr=[],d=new Date(a); d.setHours(12);
+ while(d<=b){let wd=d.getDay();if(wd!==0&&wd!==6)arr.push(new Date(d));d.setDate(d.getDate()+1)}
+ return arr;
+}
+function monthName(d){return d.toLocaleDateString('nl-NL',{month:'long',year:'numeric'})}
+function toast(t){let e=document.querySelector('#toast');e.textContent=t;e.style.display='block';clearTimeout(window.tt);window.tt=setTimeout(()=>e.style.display='none',1800)}
+
+function render(){
+ state.endDate=endInput.value||defaultEnd;
+ const today=new Date(); today.setHours(12,0,0,0);
+ const end=parse(state.endDate); end.setHours(12);
+ let start=new Date(today); start.setHours(12);
+ const days=workdays(start,end);
+ const future=days.filter(d=>d>=today);
+ const completed=days.filter(d=>state.done?.[iso(d)]);
+ const total=workdays(new Date(today.getFullYear()-1,0,1),end).length;
+ document.querySelector('#dateLine').textContent=`Laatste werkdag: ${end.toLocaleDateString('nl-NL',{day:'numeric',month:'long',year:'numeric'})}`;
+ document.querySelector('#remaining').textContent=future.length;
+ const doneCount=completed.length;
+ const denominator=Math.max(future.length+doneCount,1);
+ document.querySelector('#bar').style.width=Math.min(100,doneCount/denominator*100)+'%';
+ document.querySelector('#progressText').textContent=`${doneCount} werkdagen afgevinkt · ${future.length+doneCount} werkdagen in deze aftelperiode`;
+ const months=document.querySelector('#months');months.innerHTML='';
+ const groups={};
+ days.forEach(d=>(groups[monthName(d)]??=[]).push(d));
+ for(const [name,list] of Object.entries(groups)){
+   const sec=document.createElement('section');sec.className='month';
+   sec.innerHTML=`<h2>${name}</h2><div class="grid"></div>`;
+   const grid=sec.querySelector('.grid');
+   list.forEach(d=>{
+     const id=iso(d), btn=document.createElement('button');btn.className='day';
+     if(state.done?.[id])btn.classList.add('done');
+     if(id===iso(today))btn.classList.add('today');
+     btn.innerHTML=`<b>${d.getDate()}</b><small>${d.toLocaleDateString('nl-NL',{weekday:'short'})}</small>`;
+     btn.onclick=()=>{state.done=state.done||{}; if(state.done[id])delete state.done[id];else state.done[id]=true;save();render();toast(state.done[id]?'Werkdag afgevinkt ✓':'Werkdag weer open')};
+     grid.appendChild(btn);
+   });
+   months.appendChild(sec);
+ }
+ save();
+}
+document.querySelector('#recalc').onclick=()=>{state.done={};save();render();toast('Nieuwe aftelperiode ingesteld')};
+document.querySelector('#reset').onclick=()=>{if(confirm('Alle afvinkingen wissen?')){state.done={};save();render();toast('Afvinkingen gewist')}};
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+render();
+</script>
+</body>
+</html>
